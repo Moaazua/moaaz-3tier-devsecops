@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node.js
+node_modules/
+build/
+dist/
+coverage/
+npm-debug.log*
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+kubeconfig
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfplan
+.terraform.lock.hcl
+
+# Ansible
+*.retry
+
+# IDE and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
