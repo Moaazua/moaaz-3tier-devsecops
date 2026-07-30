@@ -1,8 +1,4 @@
-CREATE DATABASE note;
-
-\c note;
-
-CREATE TABLE messages (
+CREATE TABLE IF NOT EXISTS messages (
     id SERIAL PRIMARY KEY,
     text TEXT
 );
