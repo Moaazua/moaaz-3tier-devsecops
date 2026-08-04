@@ -22,14 +22,6 @@ npm-debug.log*
 *.key
 kubeconfig
 
-# Terraform
-.terraform/
-*.tfstate
-*.tfstate.*
-*.tfvars
-*.tfplan
-.terraform.lock.hcl
-
 # Ansible
 *.retry
 
@@ -38,8 +30,10 @@ kubeconfig
 .idea/
 .DS_Store
 Thumbs.db
-# Terraform local files
-infrastructure/.terraform/
-infrastructure/terraform.tfvars
-infrastructure/*.tfstate
-infrastructure/*.tfstate.*
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+*.tfplan
