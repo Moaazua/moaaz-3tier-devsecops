@@ -38,3 +38,8 @@ kubeconfig
 .idea/
 .DS_Store
 Thumbs.db
+# Terraform local files
+infrastructure/.terraform/
+infrastructure/terraform.tfvars
+infrastructure/*.tfstate
+infrastructure/*.tfstate.*
