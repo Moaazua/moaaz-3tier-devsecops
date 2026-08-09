@@ -49,3 +49,16 @@ module "eks" {
 
   common_tags = local.common_tags
 }
+##########################################
+#------------ eksaddons module ------------#
+##########################################
+module "eks_addons" {
+  source = "./modules/eks-addons"
+
+  project_name = var.project_name
+  environment  = var.environment
+
+  cluster_name = module.eks.cluster_name
+
+  common_tags = local.common_tags
+}
