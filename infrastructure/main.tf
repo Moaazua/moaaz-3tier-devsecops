@@ -17,3 +17,13 @@ module "network" {
   subnet_config = var.subnet_config
   common_tags   = local.common_tags
 }
+##########################################
+#------------ ecr module ------------#
+##########################################
+module "ecr" {
+  source = "./modules/ecr"
+
+  project_name = var.project_name
+  environment  = var.environment
+  common_tags  = local.common_tags
+}
