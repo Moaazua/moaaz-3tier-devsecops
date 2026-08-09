@@ -27,3 +27,25 @@ module "ecr" {
   environment  = var.environment
   common_tags  = local.common_tags
 }
+##########################################
+#------------ eks module ------------#
+##########################################
+module "eks" {
+  source = "./modules/eks"
+
+  project_name = var.project_name
+  environment  = var.environment
+
+  kubernetes_version = var.kubernetes_version
+
+  private_subnet_ids = module.network.private_subnet_ids
+
+  cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
+
+  node_instance_type = var.node_instance_type
+  node_desired_size  = var.node_desired_size
+  node_min_size      = var.node_min_size
+  node_max_size      = var.node_max_size
+
+  common_tags = local.common_tags
+}
