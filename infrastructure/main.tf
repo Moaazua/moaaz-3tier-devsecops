@@ -57,8 +57,8 @@ module "eks_addons" {
 
   project_name = var.project_name
   environment  = var.environment
-
   cluster_name = module.eks.cluster_name
+  common_tags  = local.common_tags
 
-  common_tags = local.common_tags
+  depends_on = [module.eks]
 }
