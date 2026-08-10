@@ -1,6 +1,7 @@
 #######################################
 #---------- VPC CNI role ------------#
 #######################################
+
 resource "aws_iam_role" "vpc_cni" {
   name = "${var.project_name}-${var.environment}-vpc-cni-role"
 
@@ -35,9 +36,12 @@ resource "aws_iam_role_policy_attachment" "vpc_cni" {
   role       = aws_iam_role.vpc_cni.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
 }
+
+
 #######################################
 #---------- EBS CSI role ------------#
 #######################################
+
 resource "aws_iam_role" "ebs_csi" {
   name = "${var.project_name}-${var.environment}-ebs-csi-role"
 
