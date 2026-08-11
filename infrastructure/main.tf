@@ -5,9 +5,11 @@ locals {
     ManagedBy   = "Terraform"
   }
 }
+
 ##########################################
-#------------ network module ------------#
+#------------ Network Module -----------#
 ##########################################
+
 module "network" {
   source = "./modules/network"
 
@@ -17,41 +19,30 @@ module "network" {
   subnet_config = var.subnet_config
   common_tags   = local.common_tags
 }
-##########################################
-#------------ ecr module ------------#
-##########################################
-module "ecr" {
-  source = "./modules/ecr"
 
-  project_name = var.project_name
-  environment  = var.environment
-  common_tags  = local.common_tags
-}
 ##########################################
-#------------ eks module ------------#
+#-------------- EKS Module -------------#
 ##########################################
+
 module "eks" {
   source = "./modules/eks"
 
-  project_name = var.project_name
-  environment  = var.environment
-
-  kubernetes_version = var.kubernetes_version
-
-  private_subnet_ids = module.network.private_subnet_ids
-
+  project_name                         = var.project_name
+  environment                          = var.environment
+  kubernetes_version                   = var.kubernetes_version
+  private_subnet_ids                   = module.network.private_subnet_ids
   cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
-
-  node_instance_type = var.node_instance_type
-  node_desired_size  = var.node_desired_size
-  node_min_size      = var.node_min_size
-  node_max_size      = var.node_max_size
-
-  common_tags = local.common_tags
+  node_instance_type                   = var.node_instance_type
+  node_desired_size                    = var.node_desired_size
+  node_min_size                        = var.node_min_size
+  node_max_size                        = var.node_max_size
+  common_tags                          = local.common_tags
 }
+
 ##########################################
-#------------ eksaddons module ------------#
+#----------- EKS Addons Module ---------#
 ##########################################
+
 module "eks_addons" {
   source = "./modules/eks-addons"
 
