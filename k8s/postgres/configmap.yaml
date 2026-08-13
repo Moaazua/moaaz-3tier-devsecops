@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+
+metadata:
+  name: postgres-config
+  namespace: note-app
+
+data:
+  POSTGRES_DB: note
+  POSTGRES_USER: postgres
