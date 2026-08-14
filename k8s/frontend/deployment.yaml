@@ -28,7 +28,7 @@ spec:
 
       containers:
         - name: frontend
-          image: 622813843858.dkr.ecr.eu-central-1.amazonaws.com/moaaz-3tier-devsecops-dev-frontend:v1
+          image: 622813843858.dkr.ecr.eu-central-1.amazonaws.com/moaaz-3tier-devsecops-dev-frontend:v2
 
           ports:
             - containerPort: 80
