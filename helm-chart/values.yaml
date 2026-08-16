@@ -1,0 +1,84 @@
+backend:
+  replicaCount: 2
+
+  image:
+    repository: 622813843858.dkr.ecr.eu-central-1.amazonaws.com/moaaz-3tier-devsecops-dev-backend
+    tag: "v1"
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 5000
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+
+frontend:
+  replicaCount: 2
+
+  image:
+    repository: 622813843858.dkr.ecr.eu-central-1.amazonaws.com/moaaz-3tier-devsecops-dev-frontend
+    tag: "v2"
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+
+postgres:
+  image:
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
+
+  auth:
+    database: note
+    username: postgres
+    password: ""
+
+  service:
+    port: 5432
+
+  persistence:
+    storageClass: ebs-gp3
+    size: 5Gi
+    accessMode: ReadWriteOnce
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+
+storageClass:
+  name: ebs-gp3
+  provisioner: ebs.csi.aws.com
+  type: gp3
+  volumeBindingMode: WaitForFirstConsumer
+
+
+ingress:
+  enabled: true
+  className: alb
+
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
