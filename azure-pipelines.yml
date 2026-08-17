@@ -1,0 +1,26 @@
+trigger:
+  branches:
+    include:
+      - feature/terraform-infrastructure
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+  - stage: Validate
+    displayName: Validate Pipeline
+
+    jobs:
+      - job: SanityCheck
+        displayName: GitHub Connection Check
+
+        steps:
+          - checkout: self
+
+          - script: |
+              echo "Azure DevOps pipeline is running successfully"
+              echo "Branch: $(Build.SourceBranchName)"
+              echo "Repository: $(Build.Repository.Name)"
+              ls -la
+            displayName: Verify Repository Checkout
+            
