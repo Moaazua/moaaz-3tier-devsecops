@@ -175,3 +175,64 @@ stages:
               artifact: 'frontend-image'
               publishLocation: 'pipeline'
 
+#########################################
+#------Stage 4 - Trivy Image Scan-------#
+#########################################
+  - stage: ImageSecurity
+    displayName: Stage 4 - Trivy Image Scan
+    dependsOn: Build
+    condition: succeeded()
+
+    jobs:
+      - job: ImageScan
+        displayName: Scan Docker Images
+
+        steps:
+          - checkout: none
+
+          - task: DownloadPipelineArtifact@2
+            displayName: Download Backend Image
+            inputs:
+              buildType: current
+              artifactName: backend-image
+              targetPath: '$(Pipeline.Workspace)/backend-image'
+
+          - task: DownloadPipelineArtifact@2
+            displayName: Download Frontend Image
+            inputs:
+              buildType: current
+              artifactName: frontend-image
+              targetPath: '$(Pipeline.Workspace)/frontend-image'
+
+          - script: |
+              docker load \
+                -i $(Pipeline.Workspace)/backend-image/backend-image.tar
+
+              docker load \
+                -i $(Pipeline.Workspace)/frontend-image/frontend-image.tar
+
+              docker images
+            displayName: Load Docker Images
+
+          - script: |
+              curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+                | sudo sh -s -- -b /usr/local/bin v0.74.0
+
+              trivy --version
+            displayName: Install Trivy
+
+          - script: |
+              trivy image \
+                --scanners vuln \
+                --severity HIGH,CRITICAL \
+                --exit-code 1 \
+                note-backend:$(Build.BuildId)
+            displayName: Scan Backend Image
+
+          - script: |
+              trivy image \
+                --scanners vuln \
+                --severity HIGH,CRITICAL \
+                --exit-code 1 \
+                note-frontend:$(Build.BuildId)
+            displayName: Scan Frontend Image
