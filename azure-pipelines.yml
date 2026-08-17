@@ -5,22 +5,57 @@ trigger:
 
 pool:
   vmImage: ubuntu-latest
-
+#########################################
+#------Stage 1 - Application Tests------#
+#########################################
 stages:
-  - stage: Validate
-    displayName: Validate Pipeline
+  - stage: Test
+    displayName: Stage 1 - Application Tests
 
     jobs:
-      - job: SanityCheck
-        displayName: GitHub Connection Check
+      - job: BackendTests
+        displayName: Backend Tests
 
         steps:
           - checkout: self
 
+          - task: UsePythonVersion@0
+            displayName: Setup Python
+            inputs:
+              versionSpec: '3.12'
+
           - script: |
-              echo "Azure DevOps pipeline is running successfully"
-              echo "Branch: $(Build.SourceBranchName)"
-              echo "Repository: $(Build.Repository.Name)"
-              ls -la
-            displayName: Verify Repository Checkout
-            
+              python -m pip install --upgrade pip
+              pip install -r src/note_backend/requirements.txt
+              pip install pytest
+            displayName: Install Backend Dependencies
+
+          - script: |
+              pytest tests/ \
+                --junitxml=$(Common.TestResultsDirectory)/pytest-results.xml
+            displayName: Run Backend Tests
+
+          - task: PublishTestResults@2
+            displayName: Publish Backend Test Results
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: '$(Common.TestResultsDirectory)/pytest-results.xml'
+              testRunTitle: Backend Pytest Results
+
+      - job: FrontendBuildCheck
+        displayName: Frontend Build Check
+
+        steps:
+          - checkout: self
+
+          - task: UseNode@1
+            displayName: Setup Node.js
+            inputs:
+              version: '24.x'
+
+          - script: |
+              npm ci --legacy-peer-deps
+              npm run build
+            workingDirectory: src/note_frontend
+            displayName: Build Frontend
