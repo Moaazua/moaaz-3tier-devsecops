@@ -1,0 +1,190 @@
+stages:
+  - stage: ValidateEKS
+    displayName: Stage 7 - Post-Deployment Validation
+    dependsOn: DeployEKS
+    condition: succeeded()
+
+    jobs:
+      - job: ValidateApplication
+        displayName: Validate Application on EKS
+
+        pool:
+          name: eks-deploy-pool
+
+        steps:
+          - checkout: none
+
+          - task: AWSShellScript@1
+            displayName: Run EKS Smoke Tests
+            inputs:
+              awsCredentials: 'aws-ecr-oidc'
+              regionName: 'eu-central-1'
+              scriptType: 'inline'
+              inlineScript: |
+                set -euo pipefail
+
+                CLUSTER_NAME="moaaz-3tier-devsecops-dev-eks"
+                NAMESPACE="note-app"
+                INGRESS_NAME="note-app-ingress"
+                KUBECONFIG_FILE="$(Agent.TempDirectory)/kubeconfig"
+
+                export KUBECONFIG="$KUBECONFIG_FILE"
+
+                echo "=========================================="
+                echo "Configure EKS access"
+                echo "=========================================="
+
+                aws eks update-kubeconfig \
+                  --region eu-central-1 \
+                  --name "$CLUSTER_NAME" \
+                  --kubeconfig "$KUBECONFIG"
+
+                echo "=========================================="
+                echo "Kubernetes resource validation"
+                echo "=========================================="
+
+                kubectl get nodes
+                kubectl get pods -n "$NAMESPACE"
+                kubectl get svc -n "$NAMESPACE"
+                kubectl get ingress -n "$NAMESPACE"
+                kubectl get pvc -n "$NAMESPACE"
+
+                echo "=========================================="
+                echo "Rollout validation"
+                echo "=========================================="
+
+                kubectl rollout status statefulset/postgres \
+                  -n "$NAMESPACE" \
+                  --timeout=3m
+
+                kubectl rollout status deployment/backend \
+                  -n "$NAMESPACE" \
+                  --timeout=3m
+
+                kubectl rollout status deployment/frontend \
+                  -n "$NAMESPACE" \
+                  --timeout=3m
+
+                echo "=========================================="
+                echo "Helm release validation"
+                echo "=========================================="
+
+                helm status note-app \
+                  -n "$NAMESPACE"
+
+                echo "=========================================="
+                echo "Waiting for ALB hostname"
+                echo "=========================================="
+
+                ALB_HOST=""
+
+                for i in $(seq 1 30); do
+                  ALB_HOST=$(kubectl get ingress "$INGRESS_NAME" \
+                    -n "$NAMESPACE" \
+                    -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' \
+                    2>/dev/null || true)
+
+                  if [ -n "$ALB_HOST" ]; then
+                    break
+                  fi
+
+                  echo "Waiting for ALB hostname... attempt $i/30"
+                  sleep 10
+                done
+
+                if [ -z "$ALB_HOST" ]; then
+                  echo "ERROR: ALB hostname was not assigned."
+                  exit 1
+                fi
+
+                echo "Application URL: http://$ALB_HOST"
+
+                echo "=========================================="
+                echo "Waiting for DNS resolution"
+                echo "=========================================="
+
+                DNS_READY=false
+
+                for i in $(seq 1 30); do
+                  if getent hosts "$ALB_HOST" >/dev/null 2>&1; then
+                    DNS_READY=true
+                    break
+                  fi
+
+                  echo "Waiting for DNS... attempt $i/30"
+                  sleep 10
+                done
+
+                if [ "$DNS_READY" != "true" ]; then
+                  echo "ERROR: ALB DNS did not resolve."
+                  exit 1
+                fi
+
+                getent hosts "$ALB_HOST"
+
+                echo "=========================================="
+                echo "Frontend HTTP smoke test"
+                echo "=========================================="
+
+                FRONTEND_OK=false
+
+                for i in $(seq 1 30); do
+                  STATUS=$(curl \
+                    -s \
+                    -o /tmp/frontend-response \
+                    -w "%{http_code}" \
+                    "http://$ALB_HOST/" || true)
+
+                  if [ "$STATUS" = "200" ]; then
+                    FRONTEND_OK=true
+                    break
+                  fi
+
+                  echo "Frontend HTTP status: $STATUS - attempt $i/30"
+                  sleep 10
+                done
+
+                if [ "$FRONTEND_OK" != "true" ]; then
+                  echo "ERROR: Frontend smoke test failed."
+                  exit 1
+                fi
+
+                echo "Frontend HTTP 200 OK"
+
+                echo "=========================================="
+                echo "Backend API + PostgreSQL smoke test"
+                echo "=========================================="
+
+                API_OK=false
+
+                for i in $(seq 1 30); do
+                  STATUS=$(curl \
+                    -s \
+                    -o /tmp/api-response \
+                    -w "%{http_code}" \
+                    "http://$ALB_HOST/api/messages" || true)
+
+                  if [ "$STATUS" = "200" ]; then
+                    API_OK=true
+                    break
+                  fi
+
+                  echo "API HTTP status: $STATUS - attempt $i/30"
+                  sleep 10
+                done
+
+                if [ "$API_OK" != "true" ]; then
+                  echo "ERROR: Backend API smoke test failed."
+                  exit 1
+                fi
+
+                echo "Backend API HTTP 200 OK"
+                echo "API response:"
+                cat /tmp/api-response
+                echo ""
+
+                echo "=========================================="
+                echo "POST-DEPLOYMENT VALIDATION PASSED"
+                echo "=========================================="
+                echo "Application URL:"
+                echo "http://$ALB_HOST"                  
