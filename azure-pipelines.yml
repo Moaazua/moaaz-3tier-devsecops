@@ -282,3 +282,27 @@ stages:
                 --exit-code 1 \
                 note-frontend:$(Build.BuildId)
             displayName: Scan Frontend Image
+#########################################
+#------Stage 5 - AWS Auth Test----------#
+#########################################
+  - stage: AWSAuthTest
+    displayName: Stage 5 - AWS Authentication Test
+    dependsOn: ImageSecurity
+    condition: succeeded()
+
+    jobs:
+      - job: VerifyAWS
+        displayName: Verify AWS OIDC Authentication
+
+        steps:
+          - checkout: none
+
+          - task: AWSShellScript@1
+            displayName: Verify AWS Identity
+            inputs:
+              awsCredentials: 'aws-ecr-oidc'
+              regionName: 'eu-central-1'
+              scriptType: 'inline'
+              inlineScript: |
+                echo "Verifying Azure DevOps -> AWS OIDC authentication..."
+                aws sts get-caller-identity
