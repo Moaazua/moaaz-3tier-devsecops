@@ -370,3 +370,135 @@ stages:
                 echo "Images pushed successfully."
                 echo "Backend: $BACKEND_REPO:$IMAGE_TAG"
                 echo "Frontend: $FRONTEND_REPO:$IMAGE_TAG"
+
+#########################################
+#------Stage 6 - Deploy to AWS EKS------#
+#########################################
+  - stage: DeployEKS
+    displayName: Stage 6 - Deploy to AWS EKS
+    dependsOn: PushECR
+    condition: succeeded()
+
+    jobs:
+      - job: DeployToEKS
+        displayName: Deploy Application to EKS
+
+        # Stage 6 only runs on the Rocky Linux self-hosted agent pool
+        pool:
+          name: eks-deploy-pool
+
+        steps:
+          - checkout: self
+
+          # Fail early with a clear message if the deployment agent is missing a required tool
+          - script: |
+              set -e
+
+              echo "Agent name: $(Agent.Name)"
+              echo "Agent OS: $(Agent.OS)"
+
+              for tool in aws kubectl helm; do
+                if ! command -v "$tool" >/dev/null 2>&1; then
+                  echo "ERROR: $tool is not installed or not available in PATH."
+                  exit 1
+                fi
+              done
+
+              aws --version
+              kubectl version --client
+              helm version
+            displayName: Verify Deployment Agent Tools
+
+          # Use the AWS service connection, connect kubectl to EKS, then deploy with Helm
+          - task: AWSShellScript@1
+            displayName: Deploy Helm Release to EKS
+            inputs:
+              awsCredentials: 'aws-ecr-oidc'
+              regionName: 'eu-central-1'
+              scriptType: 'inline'
+              inlineScript: |
+                set -euo pipefail
+
+                CLUSTER_NAME="moaaz-3tier-devsecops-dev-eks"
+                NAMESPACE="note-app"
+                RELEASE_NAME="note-app"
+                IMAGE_TAG="$(Build.BuildId)"
+                KUBECONFIG_FILE="$(Agent.TempDirectory)/kubeconfig"
+
+                echo "Verifying AWS identity..."
+                aws sts get-caller-identity
+
+                echo "Configuring kubectl for EKS..."
+                export KUBECONFIG="$KUBECONFIG_FILE"
+                aws eks update-kubeconfig \
+                  --region eu-central-1 \
+                  --name "$CLUSTER_NAME" \
+                  --kubeconfig "$KUBECONFIG"
+
+                echo "Verifying EKS connectivity..."
+                kubectl cluster-info
+                kubectl get nodes -o wide
+
+                echo "Validating Helm chart..."
+                helm lint helm-chart \
+                  --set backend.image.tag="$IMAGE_TAG" \
+                  --set frontend.image.tag="$IMAGE_TAG" \
+                  --set-string postgres.auth.password="$POSTGRES_PASSWORD"
+
+                echo "Deploying application to EKS..."
+                helm upgrade --install "$RELEASE_NAME" helm-chart \
+                  --namespace "$NAMESPACE" \
+                  --create-namespace \
+                  --set backend.image.tag="$IMAGE_TAG" \
+                  --set frontend.image.tag="$IMAGE_TAG" \
+                  --set-string postgres.auth.password="$POSTGRES_PASSWORD" \
+                  --atomic \
+                  --wait-for-jobs \
+                  --timeout 10m
+
+                echo "Helm deployment completed successfully."
+            env:
+              POSTGRES_PASSWORD: $(POSTGRES_PASSWORD)
+
+          # Verify the resources created by the Helm release
+          - task: AWSShellScript@1
+            displayName: Verify EKS Deployment
+            inputs:
+              awsCredentials: 'aws-ecr-oidc'
+              regionName: 'eu-central-1'
+              scriptType: 'inline'
+              inlineScript: |
+                set -euo pipefail
+
+                CLUSTER_NAME="moaaz-3tier-devsecops-dev-eks"
+                NAMESPACE="note-app"
+                KUBECONFIG_FILE="$(Agent.TempDirectory)/kubeconfig"
+
+                export KUBECONFIG="$KUBECONFIG_FILE"
+
+                # Recreate kubeconfig in case this task runs in a fresh shell context
+                aws eks update-kubeconfig \
+                  --region eu-central-1 \
+                  --name "$CLUSTER_NAME" \
+                  --kubeconfig "$KUBECONFIG"
+
+                echo "Checking rollout status..."
+                kubectl rollout status statefulset/postgres \
+                  -n "$NAMESPACE" \
+                  --timeout=5m
+
+                kubectl rollout status deployment/backend \
+                  -n "$NAMESPACE" \
+                  --timeout=5m
+
+                kubectl rollout status deployment/frontend \
+                  -n "$NAMESPACE" \
+                  --timeout=5m
+
+                echo "Current Kubernetes resources:"
+                kubectl get pods,svc,ingress,pvc \
+                  -n "$NAMESPACE" \
+                  -o wide
+
+                echo "Stage 6 deployment verification completed successfully."
+                
