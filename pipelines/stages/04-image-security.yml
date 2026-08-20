@@ -1,0 +1,105 @@
+stages:
+  - stage: ImageSecurity
+    displayName: Stage 4 - Trivy Image Scan
+    dependsOn: Build
+    condition: succeeded()
+
+    jobs:
+      - job: ImageScan
+        displayName: Scan Docker Images
+
+        steps:
+          - checkout: none
+
+          # Download Backend Artifact
+          - task: DownloadPipelineArtifact@2
+            displayName: Download Backend Image
+            inputs:
+              buildType: current
+              artifactName: backend-image
+              targetPath: '$(Pipeline.Workspace)/backend-image'
+
+          # Download Frontend Artifact
+          - task: DownloadPipelineArtifact@2
+            displayName: Download Frontend Image
+            inputs:
+              buildType: current
+              artifactName: frontend-image
+              targetPath: '$(Pipeline.Workspace)/frontend-image'
+
+          # Restore Docker Images
+          - script: |
+              docker load \
+                -i $(Pipeline.Workspace)/backend-image/backend-image.tar
+
+              docker load \
+                -i $(Pipeline.Workspace)/frontend-image/frontend-image.tar
+
+              docker images
+            displayName: Load Docker Images
+
+          # Install Trivy
+          - script: |
+              curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+                | sudo sh -s -- -b /usr/local/bin v0.74.0
+
+              trivy --version
+            displayName: Install Trivy
+
+
+          #####################################
+          # Backend Image Scan
+          #####################################
+
+          - script: |
+              echo "=========================================="
+              echo "Backend - Full Vulnerability Report"
+              echo "=========================================="
+
+              trivy image \
+                --scanners vuln \
+                --severity HIGH,CRITICAL \
+                --exit-code 0 \
+                note-backend:$(Build.BuildId)
+
+              echo ""
+              echo "=========================================="
+              echo "Backend - Fixable Vulnerability Gate"
+              echo "=========================================="
+
+              trivy image \
+                --scanners vuln \
+                --severity HIGH,CRITICAL \
+                --ignore-unfixed \
+                --exit-code 1 \
+                note-backend:$(Build.BuildId)
+            displayName: Scan Backend Image
+
+
+          #####################################
+          # Frontend Image Scan
+          #####################################
+
+          - script: |
+              echo "=========================================="
+              echo "Frontend - Full Vulnerability Report"
+              echo "=========================================="
+
+              trivy image \
+                --scanners vuln \
+                --severity HIGH,CRITICAL \
+                --exit-code 0 \
+                note-frontend:$(Build.BuildId)
+
+              echo ""
+              echo "=========================================="
+              echo "Frontend - Fixable Vulnerability Gate"
+              echo "=========================================="
+
+              trivy image \
+                --scanners vuln \
+                --severity HIGH,CRITICAL \
+                --ignore-unfixed \
+                --exit-code 1 \
+                note-frontend:$(Build.BuildId)
+            displayName: Scan Frontend Image

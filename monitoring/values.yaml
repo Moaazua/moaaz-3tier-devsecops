@@ -1,0 +1,111 @@
+############################################
+#------------- Default Rules --------------#
+############################################
+
+defaultRules:
+  create: true
+
+
+############################################
+#---------------- Grafana -----------------#
+############################################
+
+grafana:
+  enabled: true
+
+  defaultDashboardsEnabled: true
+
+  ingress:
+    enabled: false
+
+  service:
+    type: ClusterIP
+
+  persistence:
+    enabled: false
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 300m
+      memory: 512Mi
+
+
+############################################
+#-------------- Prometheus ----------------#
+############################################
+
+prometheus:
+  enabled: true
+
+  service:
+    type: ClusterIP
+
+  prometheusSpec:
+    replicas: 1
+
+    retention: 6h
+
+    ruleSelectorNilUsesHelmValues: false
+
+    ruleSelector: {}
+
+    ruleNamespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: monitoring
+
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+
+############################################
+#-------------- Alertmanager --------------#
+############################################
+
+alertmanager:
+  enabled: true
+
+  service:
+    type: ClusterIP
+
+  alertmanagerSpec:
+    replicas: 1
+
+    retention: 24h
+
+    alertmanagerConfigSelector:
+      matchLabels:
+        alertconfig: slack
+
+    alertmanagerConfigNamespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: monitoring
+
+    alertmanagerConfigMatcherStrategy:
+      type: None
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+
+############################################
+#----------- Kubernetes Metrics -----------#
+############################################
+
+kubeStateMetrics:
+  enabled: true
+
+nodeExporter:
+  enabled: true

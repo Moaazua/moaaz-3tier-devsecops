@@ -1,0 +1,70 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-init
+  namespace: {{ .Release.Namespace }}
+
+spec:
+  backoffLimit: 4
+
+  template:
+    metadata:
+      labels:
+        app: postgres-init
+
+    spec:
+      restartPolicy: OnFailure
+
+      containers:
+        - name: postgres-init
+          image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
+          imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
+
+          env:
+            - name: POSTGRES_HOST
+              value: postgres-service
+
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-config
+                  key: POSTGRES_DB
+
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-config
+                  key: POSTGRES_USER
+
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: POSTGRES_PASSWORD
+
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready \
+                -h "$POSTGRES_HOST" \
+                -U "$POSTGRES_USER" \
+                -d "$POSTGRES_DB"; do
+                sleep 2
+              done
+
+              psql \
+                -h "$POSTGRES_HOST" \
+                -U "$POSTGRES_USER" \
+                -d "$POSTGRES_DB" \
+                -f /sql/init.sql
+
+          volumeMounts:
+            - name: init-sql
+              mountPath: /sql
+              readOnly: true
+
+      volumes:
+        - name: init-sql
+          configMap:
+            name: postgres-init

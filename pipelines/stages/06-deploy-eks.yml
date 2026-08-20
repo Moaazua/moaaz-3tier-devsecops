@@ -1,0 +1,249 @@
+stages:
+  - stage: DeployEKS
+    displayName: Stage 6 - Deploy to AWS EKS
+    dependsOn: PushECR
+    condition: succeeded()
+
+    jobs:
+      - job: DeployToEKS
+        displayName: Deploy Application to EKS
+
+        # Stage 6 only runs on the Rocky Linux self-hosted agent
+        pool:
+          name: eks-deploy-pool
+
+        steps:
+          - checkout: self
+
+          #########################################
+          # Verify Self-Hosted Agent Tools
+          #########################################
+          - script: |
+              set -e
+
+              echo "Agent name: $(Agent.Name)"
+              echo "Agent OS: $(Agent.OS)"
+
+              for tool in aws kubectl helm; do
+                if ! command -v "$tool" >/dev/null 2>&1; then
+                  echo "ERROR: $tool is not installed or not available in PATH."
+                  exit 1
+                fi
+              done
+
+              aws --version
+              kubectl version --client
+              helm version
+            displayName: Verify Deployment Agent Tools
+
+          #########################################
+          # Deploy Helm Release
+          #########################################
+          - task: AWSShellScript@1
+            displayName: Deploy Helm Release to EKS
+            inputs:
+              awsCredentials: 'aws-ecr-oidc'
+              regionName: 'eu-central-1'
+              scriptType: 'inline'
+              inlineScript: |
+                set -euo pipefail
+
+                CLUSTER_NAME="moaaz-3tier-devsecops-dev-eks"
+                NAMESPACE="note-app"
+                RELEASE_NAME="note-app"
+                IMAGE_TAG="$(Build.BuildId)"
+                KUBECONFIG_FILE="$(Agent.TempDirectory)/kubeconfig"
+
+                echo "=========================================="
+                echo "Verifying AWS identity"
+                echo "=========================================="
+                aws sts get-caller-identity
+
+                echo "=========================================="
+                echo "Configuring kubectl for EKS"
+                echo "=========================================="
+
+                export KUBECONFIG="$KUBECONFIG_FILE"
+
+                aws eks update-kubeconfig \
+                  --region eu-central-1 \
+                  --name "$CLUSTER_NAME" \
+                  --kubeconfig "$KUBECONFIG"
+
+                echo "=========================================="
+                echo "Verifying EKS connectivity"
+                echo "=========================================="
+
+                kubectl cluster-info
+                kubectl get nodes -o wide
+
+                echo "=========================================="
+                echo "Validating Helm chart"
+                echo "=========================================="
+
+                helm lint helm-chart \
+                  --set backend.image.tag="$IMAGE_TAG" \
+                  --set frontend.image.tag="$IMAGE_TAG" \
+                  --set-string postgres.auth.password="$POSTGRES_PASSWORD"
+
+                echo "=========================================="
+                echo "Deploying application"
+                echo "=========================================="
+
+                helm upgrade --install "$RELEASE_NAME" helm-chart \
+                  --namespace "$NAMESPACE" \
+                  --create-namespace \
+                  --set backend.image.tag="$IMAGE_TAG" \
+                  --set frontend.image.tag="$IMAGE_TAG" \
+                  --set-string postgres.auth.password="$POSTGRES_PASSWORD" \
+                  --history-max 5
+
+                echo ""
+                echo "Helm release submitted successfully."
+
+                helm status "$RELEASE_NAME" \
+                  --namespace "$NAMESPACE"
+            env:
+              POSTGRES_PASSWORD: $(POSTGRES_PASSWORD)
+
+          #########################################
+          # Verify Kubernetes Deployment
+          #########################################
+          - task: AWSShellScript@1
+            displayName: Verify EKS Deployment
+            inputs:
+              awsCredentials: 'aws-ecr-oidc'
+              regionName: 'eu-central-1'
+              scriptType: 'inline'
+              inlineScript: |
+                set -euo pipefail
+
+                CLUSTER_NAME="moaaz-3tier-devsecops-dev-eks"
+                NAMESPACE="note-app"
+                KUBECONFIG_FILE="$(Agent.TempDirectory)/kubeconfig"
+
+                export KUBECONFIG="$KUBECONFIG_FILE"
+
+                aws eks update-kubeconfig \
+                  --region eu-central-1 \
+                  --name "$CLUSTER_NAME" \
+                  --kubeconfig "$KUBECONFIG"
+
+                echo "=========================================="
+                echo "Waiting for PostgreSQL"
+                echo "=========================================="
+
+                kubectl rollout status statefulset/postgres \
+                  -n "$NAMESPACE" \
+                  --timeout=5m
+
+                echo "=========================================="
+                echo "Waiting for PostgreSQL init job"
+                echo "=========================================="
+
+                kubectl wait \
+                  --for=condition=complete \
+                  job/postgres-init \
+                  -n "$NAMESPACE" \
+                  --timeout=5m
+
+                echo "=========================================="
+                echo "Waiting for Backend"
+                echo "=========================================="
+
+                kubectl rollout status deployment/backend \
+                  -n "$NAMESPACE" \
+                  --timeout=5m
+
+                echo "=========================================="
+                echo "Waiting for Frontend"
+                echo "=========================================="
+
+                kubectl rollout status deployment/frontend \
+                  -n "$NAMESPACE" \
+                  --timeout=5m
+
+                echo "=========================================="
+                echo "Current Kubernetes Resources"
+                echo "=========================================="
+
+                kubectl get pods \
+                  -n "$NAMESPACE" \
+                  -o wide
+
+                kubectl get svc \
+                  -n "$NAMESPACE"
+
+                kubectl get ingress \
+                  -n "$NAMESPACE"
+
+                kubectl get pvc \
+                  -n "$NAMESPACE"
+
+                echo ""
+                echo "Stage 6 deployment verification completed successfully."
+
+          #########################################
+          # Diagnostics - Runs Only On Failure
+          #########################################
+          - task: AWSShellScript@1
+            displayName: Kubernetes Failure Diagnostics
+            condition: failed()
+            inputs:
+              awsCredentials: 'aws-ecr-oidc'
+              regionName: 'eu-central-1'
+              scriptType: 'inline'
+              inlineScript: |
+                set +e
+
+                CLUSTER_NAME="moaaz-3tier-devsecops-dev-eks"
+                NAMESPACE="note-app"
+                KUBECONFIG_FILE="$(Agent.TempDirectory)/kubeconfig"
+
+                export KUBECONFIG="$KUBECONFIG_FILE"
+
+                aws eks update-kubeconfig \
+                  --region eu-central-1 \
+                  --name "$CLUSTER_NAME" \
+                  --kubeconfig "$KUBECONFIG"
+
+                echo "=========================================="
+                echo "PODS"
+                echo "=========================================="
+                kubectl get pods -n "$NAMESPACE" -o wide
+
+                echo "=========================================="
+                echo "PVC / JOBS"
+                echo "=========================================="
+                kubectl get pvc -n "$NAMESPACE"
+                kubectl get jobs -n "$NAMESPACE"
+
+                echo "=========================================="
+                echo "BACKEND DESCRIPTION"
+                echo "=========================================="
+                kubectl describe deployment backend -n "$NAMESPACE"
+
+                echo "=========================================="
+                echo "BACKEND LOGS"
+                echo "=========================================="
+                kubectl logs \
+                  -n "$NAMESPACE" \
+                  -l app=backend \
+                  --tail=100 \
+                  --prefix=true
+
+                echo "=========================================="
+                echo "POSTGRES LOGS"
+                echo "=========================================="
+                kubectl logs \
+                  -n "$NAMESPACE" \
+                  -l app=postgres \
+                  --tail=100 \
+                  --prefix=true
+
+                echo "=========================================="
+                echo "RECENT EVENTS"
+                echo "=========================================="
+                kubectl get events \
+                  -n "$NAMESPACE" \
+                  --sort-by=.lastTimestamp
