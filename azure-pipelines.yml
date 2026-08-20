@@ -17,3 +17,4 @@ stages:
   - template: pipelines/stages/05-push-ecr.yml
   - template: pipelines/stages/06-deploy-eks.yml
   - template: pipelines/stages/07-validate-eks.yml
+  - template: pipelines/stages/08-monitoring.yml
