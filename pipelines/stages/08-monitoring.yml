@@ -1,0 +1,230 @@
+stages:
+  - stage: Monitoring
+    displayName: Stage 8 - Deploy & Validate Monitoring
+    dependsOn: ValidateEKS
+    condition: succeeded()
+
+    jobs:
+      - job: DeployMonitoring
+        displayName: Deploy Monitoring Stack to EKS
+
+        pool:
+          name: eks-deploy-pool
+
+        steps:
+          - checkout: self
+
+          ############################################
+          #--------- Verify Agent Tools -------------#
+          ############################################
+          - script: |
+              set -e
+
+              for tool in aws kubectl helm; do
+                if ! command -v "$tool" >/dev/null 2>&1; then
+                  echo "ERROR: $tool is not installed or not available in PATH."
+                  exit 1
+                fi
+              done
+
+              aws --version
+              kubectl version --client
+              helm version
+            displayName: Verify Monitoring Agent Tools
+
+
+          ############################################
+          #------- Deploy Monitoring Stack ----------#
+          ############################################
+          - task: AWSShellScript@1
+            displayName: Deploy kube-prometheus-stack
+            inputs:
+              awsCredentials: 'aws-ecr-oidc'
+              regionName: 'eu-central-1'
+              scriptType: 'inline'
+              inlineScript: |
+                set -euo pipefail
+
+                CLUSTER_NAME="moaaz-3tier-devsecops-dev-eks"
+                NAMESPACE="monitoring"
+                RELEASE_NAME="monitoring"
+                KUBECONFIG_FILE="$(Agent.TempDirectory)/kubeconfig"
+
+                export KUBECONFIG="$KUBECONFIG_FILE"
+
+                echo "=========================================="
+                echo "Configure EKS access"
+                echo "=========================================="
+
+                aws sts get-caller-identity
+
+                aws eks update-kubeconfig \
+                  --region eu-central-1 \
+                  --name "$CLUSTER_NAME" \
+                  --kubeconfig "$KUBECONFIG"
+
+                kubectl get nodes
+
+
+                echo "=========================================="
+                echo "Create monitoring namespace"
+                echo "=========================================="
+
+                kubectl create namespace "$NAMESPACE" \
+                  --dry-run=client \
+                  -o yaml | kubectl apply -f -
+
+
+                echo "=========================================="
+                echo "Create / Update Slack Secret"
+                echo "=========================================="
+
+                kubectl create secret generic slack-webhook \
+                  --namespace "$NAMESPACE" \
+                  --from-literal=url="$SLACK_WEBHOOK_URL" \
+                  --dry-run=client \
+                  -o yaml | kubectl apply -f -
+
+
+                echo "=========================================="
+                echo "Configure Prometheus Helm repository"
+                echo "=========================================="
+
+                helm repo add prometheus-community \
+                  https://prometheus-community.github.io/helm-charts \
+                  --force-update
+
+                helm repo update
+
+
+                echo "=========================================="
+                echo "Deploy kube-prometheus-stack"
+                echo "=========================================="
+
+                helm upgrade --install "$RELEASE_NAME" \
+                  prometheus-community/kube-prometheus-stack \
+                  --namespace "$NAMESPACE" \
+                  --create-namespace \
+                  --values monitoring/values.yaml \
+                  --wait \
+                  --timeout 10m
+
+
+                echo "=========================================="
+                echo "Apply custom monitoring resources"
+                echo "=========================================="
+
+                kubectl apply \
+                  -f monitoring/alerts.yaml
+
+                kubectl apply \
+                  -f monitoring/alertmanager-config.yaml
+
+            env:
+              SLACK_WEBHOOK_URL: $(SLACK_WEBHOOK_URL)
+
+
+          ############################################
+          #--------- Validate Monitoring ------------#
+          ############################################
+          - task: AWSShellScript@1
+            displayName: Validate Monitoring Stack
+            inputs:
+              awsCredentials: 'aws-ecr-oidc'
+              regionName: 'eu-central-1'
+              scriptType: 'inline'
+              inlineScript: |
+                set -euo pipefail
+
+                CLUSTER_NAME="moaaz-3tier-devsecops-dev-eks"
+                NAMESPACE="monitoring"
+                KUBECONFIG_FILE="$(Agent.TempDirectory)/kubeconfig"
+
+                export KUBECONFIG="$KUBECONFIG_FILE"
+
+                aws eks update-kubeconfig \
+                  --region eu-central-1 \
+                  --name "$CLUSTER_NAME" \
+                  --kubeconfig "$KUBECONFIG"
+
+
+                echo "=========================================="
+                echo "Validate Grafana"
+                echo "=========================================="
+
+                kubectl rollout status \
+                  deployment/monitoring-grafana \
+                  -n "$NAMESPACE" \
+                  --timeout=5m
+
+
+                echo "=========================================="
+                echo "Validate Prometheus Operator"
+                echo "=========================================="
+
+                kubectl rollout status \
+                  deployment/monitoring-kube-prometheus-operator \
+                  -n "$NAMESPACE" \
+                  --timeout=5m
+
+
+                echo "=========================================="
+                echo "Validate kube-state-metrics"
+                echo "=========================================="
+
+                kubectl rollout status \
+                  deployment/monitoring-kube-state-metrics \
+                  -n "$NAMESPACE" \
+                  --timeout=5m
+
+
+                echo "=========================================="
+                echo "Validate Node Exporter"
+                echo "=========================================="
+
+                kubectl rollout status \
+                  daemonset/monitoring-prometheus-node-exporter \
+                  -n "$NAMESPACE" \
+                  --timeout=5m
+
+
+                echo "=========================================="
+                echo "Validate Prometheus"
+                echo "=========================================="
+
+                kubectl rollout status \
+                  statefulset/prometheus-monitoring-kube-prometheus-prometheus \
+                  -n "$NAMESPACE" \
+                  --timeout=5m
+
+
+                echo "=========================================="
+                echo "Validate Alertmanager"
+                echo "=========================================="
+
+                kubectl rollout status \
+                  statefulset/alertmanager-monitoring-kube-prometheus-alertmanager \
+                  -n "$NAMESPACE" \
+                  --timeout=5m
+
+
+                echo "=========================================="
+                echo "Monitoring Resources"
+                echo "=========================================="
+
+                kubectl get pods -n "$NAMESPACE"
+
+                kubectl get prometheusrule \
+                  note-app-alerts \
+                  -n "$NAMESPACE"
+
+                kubectl get alertmanagerconfig \
+                  slack-alerts \
+                  -n "$NAMESPACE" \
+                  --show-labels
+
+                helm status monitoring \
+                  -n "$NAMESPACE"
+
+                echo ""
+                echo "Monitoring deployment and validation completed successfully."

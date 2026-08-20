@@ -1,0 +1,64 @@
+stages:
+  - stage: Build
+    displayName: Stage 3 - Docker Build
+    dependsOn: Security
+    condition: succeeded()
+
+    jobs:
+
+      # Backend Image
+      - job: BackendBuild
+        displayName: Build Backend Image
+
+        steps:
+          - checkout: self
+
+          - script: |
+              docker build \
+                -t note-backend:$(Build.BuildId) \
+                src/note_backend
+            displayName: Build Backend Docker Image
+
+          - script: |
+              mkdir -p $(Build.ArtifactStagingDirectory)/backend
+
+              docker save \
+                note-backend:$(Build.BuildId) \
+                -o $(Build.ArtifactStagingDirectory)/backend/backend-image.tar
+            displayName: Export Backend Docker Image
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publish Backend Image Artifact
+            inputs:
+              targetPath: '$(Build.ArtifactStagingDirectory)/backend'
+              artifact: 'backend-image'
+              publishLocation: 'pipeline'
+
+
+      # Frontend Image
+      - job: FrontendBuild
+        displayName: Build Frontend Image
+
+        steps:
+          - checkout: self
+
+          - script: |
+              docker build \
+                -t note-frontend:$(Build.BuildId) \
+                src/note_frontend
+            displayName: Build Frontend Docker Image
+
+          - script: |
+              mkdir -p $(Build.ArtifactStagingDirectory)/frontend
+
+              docker save \
+                note-frontend:$(Build.BuildId) \
+                -o $(Build.ArtifactStagingDirectory)/frontend/frontend-image.tar
+            displayName: Export Frontend Docker Image
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publish Frontend Image Artifact
+            inputs:
+              targetPath: '$(Build.ArtifactStagingDirectory)/frontend'
+              artifact: 'frontend-image'
+              publishLocation: 'pipeline'

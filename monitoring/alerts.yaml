@@ -1,0 +1,72 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+
+metadata:
+  name: note-app-alerts
+  namespace: monitoring
+
+spec:
+  groups:
+    - name: note-app.rules
+      rules:
+
+        #----------------------------------------
+        # Backend Deployment Unavailable
+        #----------------------------------------
+        - alert: BackendUnavailable
+          expr: |
+            kube_deployment_status_replicas_unavailable{
+              namespace="note-app",
+              deployment=~".*backend.*"
+            } > 0
+          for: 2m
+
+          labels:
+            severity: critical
+            namespace: note-app
+            project: note-app
+
+          annotations:
+            summary: "Backend deployment has unavailable replicas"
+            description: "One or more backend replicas have been unavailable for more than 2 minutes."
+
+        #----------------------------------------
+        # Frontend Deployment Unavailable
+        #----------------------------------------
+        - alert: FrontendUnavailable
+          expr: |
+            kube_deployment_status_replicas_unavailable{
+              namespace="note-app",
+              deployment=~".*frontend.*"
+            } > 0
+          for: 2m
+
+          labels:
+            severity: critical
+            namespace: note-app
+            project: note-app
+
+          annotations:
+            summary: "Frontend deployment has unavailable replicas"
+            description: "One or more frontend replicas have been unavailable for more than 2 minutes."
+
+        #----------------------------------------
+        # Pod Restarting Frequently
+        #----------------------------------------
+        - alert: PodRestartingFrequently
+          expr: |
+            increase(
+              kube_pod_container_status_restarts_total{
+                namespace="note-app"
+              }[10m]
+            ) > 3
+          for: 2m
+
+          labels:
+            severity: warning
+            namespace: note-app
+            project: note-app
+
+          annotations:
+            summary: "A container is restarting frequently"
+            description: "A container restarted more than 3 times during the last 10 minutes."

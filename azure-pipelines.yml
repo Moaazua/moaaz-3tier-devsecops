@@ -1,0 +1,20 @@
+trigger:
+  batch: true
+  branches:
+    include:
+      - feature/ci-cd
+      - develop
+      - main
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+  - template: pipelines/stages/01-test.yml
+  - template: pipelines/stages/02-security.yml
+  - template: pipelines/stages/03-build.yml
+  - template: pipelines/stages/04-image-security.yml
+  - template: pipelines/stages/05-push-ecr.yml
+  - template: pipelines/stages/06-deploy-eks.yml
+  - template: pipelines/stages/07-validate-eks.yml
+  - template: pipelines/stages/08-monitoring.yml

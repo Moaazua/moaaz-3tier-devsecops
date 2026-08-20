@@ -1,0 +1,43 @@
+stages:
+  - stage: Security
+    displayName: Stage 2 - Trivy Security Scan
+    dependsOn: Test
+    condition: succeeded()
+
+    jobs:
+      - job: TrivyScan
+        displayName: Trivy Security Scan
+
+        steps:
+          - checkout: self
+
+          - script: |
+              curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+                | sudo sh -s -- -b /usr/local/bin v0.74.0
+
+              trivy --version
+            displayName: Install Trivy
+
+          - script: |
+              trivy fs \
+                --scanners vuln \
+                --severity HIGH,CRITICAL \
+                --ignorefile .trivyignore.yaml \
+                --exit-code 1 \
+                .
+            displayName: Vulnerability Security Gate
+
+          - script: |
+              trivy fs \
+                --scanners secret \
+                --exit-code 1 \
+                .
+            displayName: Secret Security Gate
+
+          - script: |
+              trivy fs \
+                --scanners misconfig \
+                --severity HIGH,CRITICAL \
+                --exit-code 0 \
+                .
+            displayName: IaC Misconfiguration Scan

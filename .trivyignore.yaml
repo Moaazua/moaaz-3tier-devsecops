@@ -1,0 +1,31 @@
+vulnerabilities:
+  - id: CVE-2021-3803
+    paths:
+      - "src/note_frontend/package-lock.json"
+    statement: "Temporarily accepted: transitive dependency from react-scripts@5.0.1"
+
+  - id: CVE-2026-45623
+    paths:
+      - "src/note_frontend/package-lock.json"
+    statement: "Temporarily accepted: transitive dependency from react-scripts@5.0.1"
+
+  - id: CVE-2026-73646
+    paths:
+      - "src/note_frontend/package-lock.json"
+    statement: "Temporarily accepted: transitive dependency from react-scripts@5.0.1"
+
+  - id: GHSA-5c6j-r48x-rmvq
+    paths:
+      - "src/note_frontend/package-lock.json"
+    statement: "Temporarily accepted: transitive dependency from react-scripts@5.0.1"
+
+  - id: CVE-2026-73650
+    paths:
+      - "src/note_frontend/package-lock.json"
+    statement: "Temporarily accepted: transitive dependency from react-scripts@5.0.1"
+
+  - id: CVE-2026-27601
+    paths:
+      - "src/note_frontend/package-lock.json"
+    statement: "Temporarily accepted: transitive dependency from react-scripts@5.0.1"
+    

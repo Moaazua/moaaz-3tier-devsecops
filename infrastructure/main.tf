@@ -36,6 +36,7 @@ module "eks" {
   node_desired_size                    = var.node_desired_size
   node_min_size                        = var.node_min_size
   node_max_size                        = var.node_max_size
+  azure_devops_role_name               = var.azure_devops_role_name
   common_tags                          = local.common_tags
 }
 

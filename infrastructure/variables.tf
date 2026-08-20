@@ -57,3 +57,11 @@ variable "node_max_size" {
   description = "Maximum number of EKS worker nodes."
   type        = number
 }
+########################################
+#------- Azure DevOps EKS Access ------#
+########################################
+
+variable "azure_devops_role_name" {
+  description = "Existing IAM role assumed by Azure DevOps for ECR push and EKS deployment."
+  type        = string
+}
